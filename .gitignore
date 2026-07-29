@@ -1,0 +1,20 @@
+# Personal notes
+docs/demo_commands.md
+
+# macOS
+.DS_Store
+
+# Runtime artifacts
+.pids/
+.cluster_name
+haproxy.cfg
+rev.json
+dbworkload.pipe
+logs/
+
+# Grafana backup files
+grafana/dashboards/*.bak
+
+# Python
+__pycache__/
+*.pyc

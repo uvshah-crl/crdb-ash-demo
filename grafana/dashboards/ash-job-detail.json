@@ -1,0 +1,350 @@
+{
+  "uid": "ash-job-detail",
+  "title": "ASH: Job Workload Detail",
+  "description": "Drill-down into CockroachDB Active Session History background job workloads",
+  "tags": ["cockroachdb", "ash"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": true,
+  "links": [
+    {
+      "title": "Back to ASH Overview",
+      "type": "link",
+      "url": "/d/ash-overview/cockroachdb-active-session-history-ash",
+      "icon": "arrow-left",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "node_filter",
+        "label": "Node",
+        "type": "custom",
+        "query": "ALL,1,2,3",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [
+          { "text": "ALL", "value": "ALL", "selected": true },
+          { "text": "1", "value": "1", "selected": false },
+          { "text": "2", "value": "2", "selected": false },
+          { "text": "3", "value": "3", "selected": false }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 400,
+      "title": "",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "### Job Workload Detail\nDrill-down into background job resource consumption. CockroachDB tracks BACKUP, IMPORT, schema changes, and auto-stats jobs in ASH with `workload_type = 'JOB'`. The `workload_id` is the job ID."
+      }
+    },
+
+    {
+      "id": 401,
+      "title": "Job Activity Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('second', sample_time) AS time, workload_id AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND workload_type = 'JOB' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal", "group": "A" },
+            "pointSize": 1,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "scaleDistribution": { "type": "linear" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["mean", "max", "sum"],
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 402,
+      "title": "Job Samples Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT workload_id AS job_id, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND workload_type = 'JOB' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1 ORDER BY samples DESC LIMIT 10",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "values": true,
+          "calcs": ["lastNotNull"],
+          "fields": "/^samples$/"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"],
+          "showLegend": true
+        },
+        "tooltip": { "mode": "single" }
+      }
+    },
+
+    {
+      "id": 403,
+      "title": "Job Resource Profile",
+      "type": "barchart",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    workload_id AS job_id,\n    count(*) FILTER (WHERE work_event_type = 'CPU') AS \"CPU\",\n    count(*) FILTER (WHERE work_event_type = 'IO') AS \"IO\",\n    count(*) FILTER (WHERE work_event_type = 'LOCK') AS \"LOCK\",\n    count(*) FILTER (WHERE work_event_type = 'NETWORK') AS \"NETWORK\",\n    count(*) FILTER (WHERE work_event_type = 'ADMISSION') AS \"ADMISSION\",\n    count(*) FILTER (WHERE work_event_type = 'OTHER') AS \"OTHER\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND workload_type = 'JOB'\n  AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}')\nGROUP BY 1\nORDER BY count(*) DESC\nLIMIT 15",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": { "mode": "normal", "group": "A" },
+            "fillOpacity": 80
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "CPU" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "IO" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LOCK" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "NETWORK" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ADMISSION" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "OTHER" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "stacking": "normal",
+        "xField": "job_id",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 404,
+      "title": "Job Work Events Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event_type AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND workload_type = 'JOB' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal" },
+            "pointSize": 1,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "scaleDistribution": { "type": "linear" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "OTHER" }, "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] },
+          { "matcher": { "id": "byName", "options": "ADMISSION" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] },
+          { "matcher": { "id": "byName", "options": "NETWORK" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] },
+          { "matcher": { "id": "byName", "options": "LOCK" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] },
+          { "matcher": { "id": "byName", "options": "IO" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] },
+          { "matcher": { "id": "byName", "options": "CPU" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }, { "id": "custom.stacking", "value": { "mode": "normal", "group": "A" } }] }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["mean", "max", "sum"],
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 405,
+      "title": "Jobs by Node",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    'Node ' || node_id::TEXT AS node,\n    count(*) FILTER (WHERE work_event_type = 'CPU') AS \"CPU\",\n    count(*) FILTER (WHERE work_event_type = 'IO') AS \"IO\",\n    count(*) FILTER (WHERE work_event_type = 'LOCK') AS \"LOCK\",\n    count(*) FILTER (WHERE work_event_type = 'NETWORK') AS \"NETWORK\",\n    count(*) FILTER (WHERE work_event_type = 'ADMISSION') AS \"ADMISSION\",\n    count(*) FILTER (WHERE work_event_type = 'OTHER') AS \"OTHER\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND workload_type = 'JOB'\nGROUP BY node_id\nORDER BY node_id",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": { "mode": "normal", "group": "A" },
+            "fillOpacity": 80
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "CPU" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "IO" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LOCK" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "NETWORK" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ADMISSION" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "OTHER" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "stacking": "normal",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 406,
+      "title": "Job Work Event Detail",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    workload_id AS job_id,\n    work_event_type,\n    work_event,\n    'Node ' || node_id::TEXT AS node,\n    count(*) AS samples,\n    round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND workload_type = 'JOB'\n  AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}')\nGROUP BY 1, 2, 3, 4\nORDER BY samples DESC\nLIMIT 30",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "samples" },
+            "properties": [{ "id": "custom.width", "value": 100 }]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "samples", "desc": true }],
+        "footer": { "show": false }
+      }
+    }
+  ]
+}

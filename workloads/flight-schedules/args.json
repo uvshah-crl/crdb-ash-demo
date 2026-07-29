@@ -1,0 +1,8 @@
+{
+  "schedule_freq": 10,
+  "status_freq": 90,
+  "inventory_freq": 75,
+  "price_freq": 25,
+  "batch_size": 16,
+  "delay": 100
+}

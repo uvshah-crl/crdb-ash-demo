@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: CockroachDB
+    uid: cockroachdb
+    type: postgres
+    access: proxy
+    url: crdb-haproxy:26000
+    database: defaultdb
+    user: root
+    isDefault: true
+    editable: false
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 600
+      postgresVersion: 1400
+      timescaledb: false

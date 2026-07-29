@@ -1,0 +1,101 @@
+services:
+  crdb-1:
+    image: cockroachdb/cockroach:v26.2.0
+    container_name: crdb-1
+    hostname: crdb-1
+    command: start --insecure --join=crdb-1,crdb-2,crdb-3 --advertise-addr=crdb-1 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080
+    ports:
+      - "26257:26257"
+      - "26258:8080"
+    volumes:
+      - crdb-1-data:/cockroach/cockroach-data
+    networks:
+      - crdb-net
+
+  crdb-2:
+    image: cockroachdb/cockroach:v26.2.0
+    container_name: crdb-2
+    hostname: crdb-2
+    command: start --insecure --join=crdb-1,crdb-2,crdb-3 --advertise-addr=crdb-2 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080
+    volumes:
+      - crdb-2-data:/cockroach/cockroach-data
+    networks:
+      - crdb-net
+
+  crdb-3:
+    image: cockroachdb/cockroach:v26.2.0
+    container_name: crdb-3
+    hostname: crdb-3
+    command: start --insecure --join=crdb-1,crdb-2,crdb-3 --advertise-addr=crdb-3 --listen-addr=0.0.0.0:26257 --http-addr=0.0.0.0:8080
+    volumes:
+      - crdb-3-data:/cockroach/cockroach-data
+    networks:
+      - crdb-net
+
+  crdb-init:
+    image: cockroachdb/cockroach:v26.2.0
+    container_name: crdb-init
+    depends_on:
+      - crdb-1
+      - crdb-2
+      - crdb-3
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+          if /cockroach/cockroach init --insecure --host=crdb-1:26257 2>&1; then
+            echo "Cluster initialized successfully"
+            exit 0
+          fi
+          echo "Waiting for nodes to be ready... attempt $$i"
+          sleep 2
+        done
+        echo "ERROR: Cluster init failed after 15 attempts"
+        exit 1
+    restart: "no"
+    networks:
+      - crdb-net
+
+  haproxy:
+    image: haproxy:latest
+    container_name: crdb-haproxy
+    depends_on:
+      - crdb-1
+      - crdb-2
+      - crdb-3
+    ports:
+      - "26000:26000"
+      - "8404:8404"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - crdb-net
+
+  grafana:
+    image: grafana/grafana-oss:11.6.0
+    container_name: crdb-grafana
+    depends_on:
+      crdb-init:
+        condition: service_completed_successfully
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/ash-overview.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - crdb-net
+
+volumes:
+  crdb-1-data:
+  crdb-2-data:
+  crdb-3-data:
+
+networks:
+  crdb-net:
+    driver: bridge

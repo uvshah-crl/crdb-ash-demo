@@ -1,0 +1,6 @@
+{
+  "min_batch_size": 10,
+  "max_batch_size": 100,
+  "delay": 10000,
+  "txn_pooling": false
+}

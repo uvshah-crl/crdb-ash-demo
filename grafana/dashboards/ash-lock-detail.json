@@ -1,0 +1,372 @@
+{
+  "uid": "ash-lock-detail",
+  "title": "ASH: Lock Contention Detail",
+  "description": "Drill-down into CockroachDB Active Session History lock contention events",
+  "tags": ["cockroachdb", "ash"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": true,
+  "links": [
+    {
+      "title": "Back to ASH Overview",
+      "type": "link",
+      "url": "/d/ash-overview/cockroachdb-active-session-history-ash",
+      "icon": "arrow-left",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "app_filter",
+        "label": "Application",
+        "type": "custom",
+        "query": "ALL",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [
+          { "text": "ALL", "value": "ALL", "selected": true }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "lock_type",
+        "label": "Lock Type",
+        "type": "custom",
+        "query": "ALL,LockWait,LatchWait,TxnPushWait,TxnQueryWait",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [
+          { "text": "ALL", "value": "ALL", "selected": true },
+          { "text": "LockWait", "value": "LockWait", "selected": false },
+          { "text": "LatchWait", "value": "LatchWait", "selected": false },
+          { "text": "TxnPushWait", "value": "TxnPushWait", "selected": false },
+          { "text": "TxnQueryWait", "value": "TxnQueryWait", "selected": false }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 200,
+      "title": "",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "### Lock Contention Detail\nDrill-down into lock contention events. **LockWait** = waiting for a key lock held by another transaction. **LatchWait** = waiting for a latch on a range. **TxnPushWait** = pushing a conflicting transaction. **TxnQueryWait** = waiting for transaction status resolution."
+      }
+    },
+
+    {
+      "id": 201,
+      "title": "Lock Events Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "scaleDistribution": { "type": "linear" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "LockWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LatchWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnPushWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnQueryWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["mean", "max", "sum"],
+          "showLegend": true
+        }
+      }
+    },
+
+    {
+      "id": 202,
+      "title": "Lock Type Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT work_event AS lock_type, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' GROUP BY 1 ORDER BY samples DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "LockWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LatchWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnPushWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnQueryWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "values": true,
+          "calcs": [],
+          "fields": "/^samples$/"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"],
+          "showLegend": true
+        },
+        "tooltip": { "mode": "single" }
+      }
+    },
+
+    {
+      "id": 203,
+      "title": "Top Statements Experiencing Lock Waits",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview,\n    ash.app_name,\n    ash.work_event AS lock_type,\n    count(*) AS samples,\n    round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct\nFROM information_schema.crdb_cluster_active_session_history ash\nLEFT JOIN (\n    SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query\n    FROM crdb_internal.statement_statistics\n    UNION ALL\n    SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query\n    FROM crdb_internal.statement_activity\n) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex')\nWHERE $__timeFilter(ash.sample_time)\n  AND ash.work_event_type = 'LOCK'\n  AND ash.workload_type = 'STATEMENT'\n  AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}')\n  AND ('${lock_type}' = 'ALL' OR ash.work_event = '${lock_type}')\nGROUP BY 1, 2, 3\nORDER BY samples DESC\nLIMIT 25",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "query_preview" },
+            "properties": [{ "id": "custom.width", "value": 500 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "samples" },
+            "properties": [{ "id": "custom.width", "value": 100 }]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "samples", "desc": true }],
+        "footer": { "show": false }
+      }
+    },
+
+    {
+      "id": 204,
+      "title": "Lock Contention by Application",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    app_name,\n    count(*) FILTER (WHERE work_event = 'LockWait') AS \"LockWait\",\n    count(*) FILTER (WHERE work_event = 'LatchWait') AS \"LatchWait\",\n    count(*) FILTER (WHERE work_event = 'TxnPushWait') AS \"TxnPushWait\",\n    count(*) FILTER (WHERE work_event = 'TxnQueryWait') AS \"TxnQueryWait\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND work_event_type = 'LOCK'\n  AND workload_type = 'STATEMENT'\n  AND app_name != '' AND app_name NOT LIKE '$ %'\n  AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}')\nGROUP BY 1\nORDER BY count(*) DESC\nLIMIT 15",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": { "mode": "normal", "group": "A" },
+            "fillOpacity": 80
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "LockWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LatchWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnPushWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnQueryWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "stacking": "normal",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 205,
+      "title": "Lock Contention by Node",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    'Node ' || node_id::TEXT AS node,\n    count(*) FILTER (WHERE work_event = 'LockWait') AS \"LockWait\",\n    count(*) FILTER (WHERE work_event = 'LatchWait') AS \"LatchWait\",\n    count(*) FILTER (WHERE work_event = 'TxnPushWait') AS \"TxnPushWait\",\n    count(*) FILTER (WHERE work_event = 'TxnQueryWait') AS \"TxnQueryWait\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND work_event_type = 'LOCK'\n  AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}')\n  AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}')\nGROUP BY node_id\nORDER BY node_id",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": { "mode": "normal", "group": "A" },
+            "fillOpacity": 80
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "LockWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF6347", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "LatchWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnPushWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TxnQueryWait" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "stacking": "normal",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "id": 206,
+      "title": "Lock Event Detail",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n    work_event AS lock_type,\n    app_name,\n    workload_type,\n    'Node ' || node_id::TEXT AS node,\n    count(*) AS samples,\n    round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND work_event_type = 'LOCK'\n  AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}')\n  AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}')\nGROUP BY 1, 2, 3, 4\nORDER BY samples DESC\nLIMIT 30",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "samples" },
+            "properties": [{ "id": "custom.width", "value": 100 }]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "samples", "desc": true }],
+        "footer": { "show": false }
+      }
+    }
+  ]
+}

@@ -1,0 +1,245 @@
+{
+  "uid": "ash-admission-detail",
+  "title": "ASH: Admission Control Detail",
+  "description": "Drill-down into CockroachDB admission control queues from Active Session History (ASH)",
+  "tags": ["cockroachdb", "ash"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": true,
+  "links": [
+    { "title": "Back to ASH Overview", "type": "link", "url": "/d/ash-overview/cockroachdb-active-session-history-ash", "icon": "arrow-left", "targetBlank": false }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "app_filter",
+        "label": "Application",
+        "type": "custom",
+        "query": "ALL",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [
+          { "text": "ALL", "value": "ALL", "selected": true }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "node_filter",
+        "label": "Node",
+        "type": "custom",
+        "query": "ALL,1,2,3",
+        "current": { "text": "ALL", "value": "ALL", "selected": true },
+        "options": [
+          { "text": "ALL", "value": "ALL", "selected": true },
+          { "text": "1", "value": "1", "selected": false },
+          { "text": "2", "value": "2", "selected": false },
+          { "text": "3", "value": "3", "selected": false }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "title": "",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "### Admission Control Detail\nDrill-down into admission control queues. High admission samples indicate the cluster is throttling work due to CPU or storage pressure. Use the Application and Node filters above to narrow analysis."
+      }
+    },
+
+    {
+      "id": 101,
+      "title": "Admission Queue Activity Over Time",
+      "description": "Stacked area of admission queue sub-events over time. Shows which admission queues are active and when.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' GROUP BY 1, 2 ORDER BY 1",
+        "format": "time_series",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal" },
+            "pointSize": 1,
+            "lineWidth": 1
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 102,
+      "title": "Admission Samples by Queue",
+      "description": "Donut chart showing the distribution of admission samples across different queues.",
+      "type": "piechart",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 2 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT work_event AS queue, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' GROUP BY 1 ORDER BY samples DESC",
+        "format": "table",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "tooltip": { "mode": "single" },
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+
+    {
+      "id": 103,
+      "title": "Top Statements in Admission Queues",
+      "description": "SQL statements experiencing admission control throttling, joined with statement_statistics for query text.",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview, ash.app_name, ash.work_event AS admission_queue, count(*) AS samples, round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct FROM information_schema.crdb_cluster_active_session_history ash LEFT JOIN (SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query FROM crdb_internal.statement_statistics UNION ALL SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query FROM crdb_internal.statement_activity) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex') WHERE $__timeFilter(ash.sample_time) AND ash.work_event_type = 'ADMISSION' AND ash.workload_type = 'STATEMENT' AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR ash.node_id::TEXT = '${node_filter}') GROUP BY 1, 2, 3 ORDER BY samples DESC LIMIT 25",
+        "format": "table",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "query_preview" }, "properties": [{ "id": "custom.width", "value": 450 }] },
+          {
+            "matcher": { "id": "byName", "options": "pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 10 },
+                    { "color": "red", "value": 25 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "samples", "desc": true }],
+        "footer": { "show": false }
+      }
+    },
+
+    {
+      "id": 104,
+      "title": "Admission by Application",
+      "description": "Horizontal bar chart showing admission queue breakdown per application.",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT app_name, count(*) FILTER (WHERE work_event LIKE '%cpu%') AS \"CPU Queue\", count(*) FILTER (WHERE work_event LIKE '%store%') AS \"Store Queue\", count(*) FILTER (WHERE work_event NOT LIKE '%cpu%' AND work_event NOT LIKE '%store%') AS \"Other Queue\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND workload_type = 'STATEMENT' AND app_name != '' AND app_name NOT LIKE '$ %' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1 ORDER BY count(*) DESC LIMIT 15",
+        "format": "table",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Store Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Other Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "normal",
+        "legend": { "displayMode": "list", "placement": "right" },
+        "tooltip": { "mode": "multi" },
+        "xField": "app_name",
+        "groupWidth": 0.7
+      }
+    },
+    {
+      "id": 105,
+      "title": "Admission by Node",
+      "description": "Vertical stacked bar chart showing admission queue breakdown per node.",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT 'Node ' || node_id::TEXT AS node, count(*) FILTER (WHERE work_event LIKE '%cpu%') AS \"CPU Queue\", count(*) FILTER (WHERE work_event LIKE '%store%') AS \"Store Queue\", count(*) FILTER (WHERE work_event NOT LIKE '%cpu%' AND work_event NOT LIKE '%store%') AS \"Other Queue\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') GROUP BY node_id ORDER BY node_id",
+        "format": "table",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Store Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Other Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "stacking": "normal",
+        "legend": { "displayMode": "list", "placement": "right" },
+        "tooltip": { "mode": "multi" },
+        "xField": "node",
+        "groupWidth": 0.7
+      }
+    },
+
+    {
+      "id": 106,
+      "title": "Admission Queue Detail",
+      "description": "Detailed breakdown of admission queue samples by queue, application, workload type, and node.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "datasource": { "type": "postgres", "uid": "cockroachdb" },
+      "targets": [{
+        "rawSql": "SELECT work_event AS queue, app_name, workload_type, 'Node ' || node_id::TEXT AS node, count(*) AS samples, round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1, 2, 3, 4 ORDER BY samples DESC LIMIT 30",
+        "format": "table",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "pct" }, "properties": [{ "id": "unit", "value": "percent" }] }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "samples", "desc": true }],
+        "footer": { "show": false }
+      }
+    }
+  ]
+}

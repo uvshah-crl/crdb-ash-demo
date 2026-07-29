@@ -1,0 +1,143 @@
+DROP TABLE IF EXISTS events_jsonb CASCADE;
+DROP TABLE IF EXISTS events_jsonb_manual CASCADE;
+DROP TABLE IF EXISTS events_text CASCADE;
+DROP TABLE IF EXISTS events_jsonb_status;
+DROP TABLE IF EXISTS events_jsonb_archive;
+DROP TABLE IF EXISTS events_jsonb_manual_status;
+DROP TABLE IF EXISTS events_jsonb_manual_archive;
+DROP TABLE IF EXISTS events_text_status;
+DROP TABLE IF EXISTS events_text_archive;
+
+-- ---------------------------------------------------------
+-- Enum type for event types
+-- ---------------------------------------------------------
+DROP TYPE IF EXISTS event_type_enum;
+CREATE TYPE event_type_enum AS ENUM (
+  'ROUTE_AUTHORIZATION',
+  'SIGNAL_CLEAR',
+  'SPEED_RESTRICTION',
+  'TRACK_OUT_OF_SERVICE',
+  'TRAIN_POSITION_UPDATE',
+  'SWITCH_POSITION_CHANGE',
+  'WORK_ZONE_PROTECTION',
+  'CROSSING_FAILURE',
+  'POWER_OUTAGE',
+  'DISPATCH_NOTE'
+);
+
+-- ---------------------------------------------------------
+-- Core tables: JSONB-backed events
+-- ---------------------------------------------------------
+CREATE TABLE events_jsonb (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      JSONB NOT NULL,
+
+  event_type   event_type_enum
+    GENERATED ALWAYS AS ((payload->>'eventType')::event_type_enum) STORED,
+  authority_id STRING
+    GENERATED ALWAYS AS (payload->>'authorityId') STORED,
+  train_id     STRING
+    GENERATED ALWAYS AS ((payload->'train'->>'trainId')) STORED
+);
+
+CREATE INVERTED INDEX idx_events_jsonb_payload ON events_jsonb (payload);
+CREATE INDEX idx_events_jsonb_event_type_created ON events_jsonb (event_type, created_at DESC);
+CREATE INDEX idx_events_jsonb_authority ON events_jsonb (authority_id);
+
+-- ---------------------------------------------------------------------
+-- events_jsonb_manual
+--
+-- - payload stored as JSONB
+-- - event_type / authority_id / train_id are NORMAL columns
+--   (app populates them explicitly)
+-- - no inverted index on payload
+-- ---------------------------------------------------------------------
+CREATE TABLE events_jsonb_manual (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      JSONB NOT NULL,
+
+  -- Explicit "flat" columns, NOT generated
+  event_type   event_type_enum NOT NULL,
+  authority_id STRING NOT NULL,
+  train_id     STRING NOT NULL
+);
+
+-- B-tree indexes only
+CREATE INDEX idx_events_jsonb_manual_event_type_created ON events_jsonb_manual (event_type, created_at DESC);
+CREATE INDEX idx_events_jsonb_manual_authority ON events_jsonb_manual (authority_id);
+
+-- ---------------------------------------------------------
+-- Core tables: TEXT-backed events (same logical shape)
+-- ---------------------------------------------------------
+CREATE TABLE events_text (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      STRING NOT NULL,
+
+  -- Explicit "flat" columns, NOT generated
+  event_type   event_type_enum NOT NULL,
+  authority_id STRING NOT NULL,
+  train_id     STRING NOT NULL
+);
+
+CREATE INDEX idx_events_text_event_type_created ON events_text (event_type, created_at DESC);
+CREATE INDEX idx_events_text_authority ON events_text (authority_id);
+
+-- ---------------------------------------------------------
+-- Status + archive tables
+-- ---------------------------------------------------------
+CREATE TABLE events_jsonb_status (
+  event_id     UUID PRIMARY KEY REFERENCES events_jsonb (id) ON DELETE CASCADE,
+  status       STRING NOT NULL CHECK (status IN ('PENDING','PROCESSING','COMPLETE','FAILED')),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_events_jsonb_status_updated ON events_jsonb_status (status, updated_at);
+
+CREATE TABLE events_jsonb_archive (
+  id           UUID PRIMARY KEY,
+  archived_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      JSONB NOT NULL,
+  event_type   event_type_enum,
+  authority_id STRING,
+  created_at   TIMESTAMPTZ,
+  train_id     STRING
+);
+
+CREATE TABLE events_jsonb_manual_status (
+  event_id     UUID PRIMARY KEY REFERENCES events_jsonb_manual (id) ON DELETE CASCADE,
+  status       STRING NOT NULL CHECK (status IN ('PENDING','PROCESSING','COMPLETE','FAILED')),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_events_jsonb_manual_status_updated ON events_jsonb_manual_status (status, updated_at);
+
+CREATE TABLE events_jsonb_manual_archive (
+  id           UUID PRIMARY KEY,
+  archived_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      JSONB NOT NULL,
+  event_type   event_type_enum,
+  authority_id STRING,
+  created_at   TIMESTAMPTZ,
+  train_id     STRING
+);
+
+CREATE TABLE events_text_status (
+  event_id     UUID PRIMARY KEY REFERENCES events_text (id) ON DELETE CASCADE,
+  status       STRING NOT NULL CHECK (status IN ('PENDING','PROCESSING','COMPLETE','FAILED')),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_events_text_status_updated ON events_text_status (status, updated_at);
+
+CREATE TABLE events_text_archive (
+  id           UUID PRIMARY KEY,
+  archived_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload      STRING NOT NULL,
+  event_type   event_type_enum,
+  authority_id STRING,
+  created_at   TIMESTAMPTZ,
+  train_id     STRING
+);
