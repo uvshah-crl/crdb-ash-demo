@@ -15,6 +15,8 @@ Live demo of CockroachDB's Active Session History feature (preview in v26.2). De
 - **dbworkload** — `pip install 'dbworkload[postgres]'`
 - **Docker** (for Grafana container)
 
+For a detailed step-by-step walkthrough with SQL examples and talking points, see the [Demo Runbook](docs/RUNBOOK.md).
+
 ## Quick Start
 
 ```bash
