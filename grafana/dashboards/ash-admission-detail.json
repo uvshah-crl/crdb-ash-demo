@@ -69,7 +69,7 @@
       "gridPos": { "h": 10, "w": 16, "x": 0, "y": 2 },
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [{
-        "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' GROUP BY 1, 2 ORDER BY 1",
+        "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1, 2 ORDER BY 1",
         "format": "time_series",
         "refId": "A"
       }],
@@ -100,7 +100,7 @@
       "gridPos": { "h": 10, "w": 8, "x": 16, "y": 2 },
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [{
-        "rawSql": "SELECT work_event AS queue, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' GROUP BY 1 ORDER BY samples DESC",
+        "rawSql": "SELECT work_event AS queue, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1 ORDER BY samples DESC",
         "format": "table",
         "refId": "A"
       }],
@@ -124,7 +124,7 @@
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [{
-        "rawSql": "SELECT COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview, ash.app_name, ash.work_event AS admission_queue, count(*) AS samples, round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct FROM information_schema.crdb_cluster_active_session_history ash LEFT JOIN (SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query FROM crdb_internal.statement_statistics UNION ALL SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query FROM crdb_internal.statement_activity) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex') WHERE $__timeFilter(ash.sample_time) AND ash.work_event_type = 'ADMISSION' AND ash.workload_type = 'STATEMENT' AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR ash.node_id::TEXT = '${node_filter}') GROUP BY 1, 2, 3 ORDER BY samples DESC LIMIT 25",
+        "rawSql": "SELECT COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview, ash.app_name, ash.work_event AS admission_queue, count(*) AS samples, round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct FROM information_schema.crdb_cluster_active_session_history ash LEFT JOIN (SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query FROM crdb_internal.statement_statistics ORDER BY fingerprint_id) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex') WHERE $__timeFilter(ash.sample_time) AND ash.work_event_type = 'ADMISSION' AND ash.workload_type = 'STATEMENT' AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}') AND ('${node_filter}' = 'ALL' OR ash.node_id::TEXT = '${node_filter}') GROUP BY 1, 2, 3 ORDER BY samples DESC LIMIT 25",
         "format": "table",
         "refId": "A"
       }],
@@ -166,16 +166,17 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [{
-        "rawSql": "SELECT app_name, count(*) FILTER (WHERE work_event LIKE '%cpu%') AS \"CPU Queue\", count(*) FILTER (WHERE work_event LIKE '%store%') AS \"Store Queue\", count(*) FILTER (WHERE work_event NOT LIKE '%cpu%' AND work_event NOT LIKE '%store%') AS \"Other Queue\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND workload_type = 'STATEMENT' AND app_name != '' AND app_name NOT LIKE '$ %' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1 ORDER BY count(*) DESC LIMIT 15",
+        "rawSql": "SELECT app_name, count(*) FILTER (WHERE work_event LIKE 'kv-%-cpu-%') AS \"CPU\", count(*) FILTER (WHERE work_event LIKE 'kv-%-store-%') AS \"Store\", count(*) FILTER (WHERE work_event LIKE 'sql-%') AS \"SQL\", count(*) FILTER (WHERE work_event LIKE 'replication-%') AS \"Replication\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND workload_type = 'STATEMENT' AND coalesce(app_name, '') != '' AND app_name NOT LIKE '$ %' AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}') GROUP BY 1 ORDER BY count(*) DESC LIMIT 15",
         "format": "table",
         "refId": "A"
       }],
       "fieldConfig": {
         "defaults": { "color": { "mode": "palette-classic" } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "CPU Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Store Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Other Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }] }
+          { "matcher": { "id": "byName", "options": "CPU" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Store" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "SQL" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Replication" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }] }
         ]
       },
       "options": {
@@ -195,16 +196,17 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [{
-        "rawSql": "SELECT 'Node ' || node_id::TEXT AS node, count(*) FILTER (WHERE work_event LIKE '%cpu%') AS \"CPU Queue\", count(*) FILTER (WHERE work_event LIKE '%store%') AS \"Store Queue\", count(*) FILTER (WHERE work_event NOT LIKE '%cpu%' AND work_event NOT LIKE '%store%') AS \"Other Queue\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') GROUP BY node_id ORDER BY node_id",
+        "rawSql": "SELECT 'Node ' || node_id::TEXT AS node, count(*) FILTER (WHERE work_event LIKE 'kv-%-cpu-%') AS \"CPU\", count(*) FILTER (WHERE work_event LIKE 'kv-%-store-%') AS \"Store\", count(*) FILTER (WHERE work_event LIKE 'sql-%') AS \"SQL\", count(*) FILTER (WHERE work_event LIKE 'replication-%') AS \"Replication\" FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'ADMISSION' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') GROUP BY node_id ORDER BY node_id",
         "format": "table",
         "refId": "A"
       }],
       "fieldConfig": {
         "defaults": { "color": { "mode": "palette-classic" } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "CPU Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Store Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Other Queue" }, "properties": [{ "id": "color", "value": { "fixedColor": "#B877D9", "mode": "fixed" } }] }
+          { "matcher": { "id": "byName", "options": "CPU" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Store" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "SQL" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2CC0C", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Replication" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }] }
         ]
       },
       "options": {

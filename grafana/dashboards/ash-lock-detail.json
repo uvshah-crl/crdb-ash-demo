@@ -76,7 +76,7 @@
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [
         {
-          "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('second', sample_time) AS time, work_event AS metric, count(*) AS value FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}') GROUP BY 1, 2 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -136,7 +136,7 @@
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [
         {
-          "rawSql": "SELECT work_event AS lock_type, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' GROUP BY 1 ORDER BY samples DESC",
+          "rawSql": "SELECT work_event AS lock_type, count(*) AS samples FROM information_schema.crdb_cluster_active_session_history WHERE $__timeFilter(sample_time) AND work_event_type = 'LOCK' AND ('${app_filter}' = 'ALL' OR app_name = '${app_filter}') GROUP BY 1 ORDER BY samples DESC",
           "format": "table",
           "refId": "A"
         }
@@ -189,7 +189,7 @@
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [
         {
-          "rawSql": "SELECT\n    COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview,\n    ash.app_name,\n    ash.work_event AS lock_type,\n    count(*) AS samples,\n    round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct\nFROM information_schema.crdb_cluster_active_session_history ash\nLEFT JOIN (\n    SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query\n    FROM crdb_internal.statement_statistics\n    UNION ALL\n    SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query\n    FROM crdb_internal.statement_activity\n) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex')\nWHERE $__timeFilter(ash.sample_time)\n  AND ash.work_event_type = 'LOCK'\n  AND ash.workload_type = 'STATEMENT'\n  AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}')\n  AND ('${lock_type}' = 'ALL' OR ash.work_event = '${lock_type}')\nGROUP BY 1, 2, 3\nORDER BY samples DESC\nLIMIT 25",
+          "rawSql": "SELECT\n    COALESCE(substring(ss.query, 1, 120), 'fingerprint: ' || ash.workload_id) AS query_preview,\n    ash.app_name,\n    ash.work_event AS lock_type,\n    count(*) AS samples,\n    round(count(*) * 100.0 / NULLIF(sum(count(*)) OVER (), 0), 1) AS pct\nFROM information_schema.crdb_cluster_active_session_history ash\nLEFT JOIN (\n    SELECT DISTINCT ON (fingerprint_id) fingerprint_id, metadata->>'query' AS query\n    FROM crdb_internal.statement_statistics\n    ORDER BY fingerprint_id\n) ss ON ash.workload_id = encode(ss.fingerprint_id, 'hex')\nWHERE $__timeFilter(ash.sample_time)\n  AND ash.work_event_type = 'LOCK'\n  AND ash.workload_type = 'STATEMENT'\n  AND ('${app_filter}' = 'ALL' OR ash.app_name = '${app_filter}')\n  AND ('${lock_type}' = 'ALL' OR ash.work_event = '${lock_type}')\nGROUP BY 1, 2, 3\nORDER BY samples DESC\nLIMIT 25",
           "format": "table",
           "refId": "A"
         }
@@ -229,7 +229,7 @@
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [
         {
-          "rawSql": "SELECT\n    app_name,\n    count(*) FILTER (WHERE work_event = 'LockWait') AS \"LockWait\",\n    count(*) FILTER (WHERE work_event = 'LatchWait') AS \"LatchWait\",\n    count(*) FILTER (WHERE work_event = 'TxnPushWait') AS \"TxnPushWait\",\n    count(*) FILTER (WHERE work_event = 'TxnQueryWait') AS \"TxnQueryWait\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND work_event_type = 'LOCK'\n  AND workload_type = 'STATEMENT'\n  AND app_name != '' AND app_name NOT LIKE '$ %'\n  AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}')\nGROUP BY 1\nORDER BY count(*) DESC\nLIMIT 15",
+          "rawSql": "SELECT\n    app_name,\n    count(*) FILTER (WHERE work_event = 'LockWait') AS \"LockWait\",\n    count(*) FILTER (WHERE work_event = 'LatchWait') AS \"LatchWait\",\n    count(*) FILTER (WHERE work_event = 'TxnPushWait') AS \"TxnPushWait\",\n    count(*) FILTER (WHERE work_event = 'TxnQueryWait') AS \"TxnQueryWait\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND work_event_type = 'LOCK'\n  AND workload_type = 'STATEMENT'\n  AND coalesce(app_name, '') != '' AND app_name NOT LIKE '$ %'\n  AND ('${lock_type}' = 'ALL' OR work_event = '${lock_type}')\nGROUP BY 1\nORDER BY count(*) DESC\nLIMIT 15",
           "format": "table",
           "refId": "A"
         }

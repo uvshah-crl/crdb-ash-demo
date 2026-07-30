@@ -255,7 +255,7 @@
       "datasource": { "type": "postgres", "uid": "cockroachdb" },
       "targets": [
         {
-          "rawSql": "SELECT\n    'Node ' || node_id::TEXT AS node,\n    count(*) FILTER (WHERE work_event_type = 'CPU') AS \"CPU\",\n    count(*) FILTER (WHERE work_event_type = 'IO') AS \"IO\",\n    count(*) FILTER (WHERE work_event_type = 'LOCK') AS \"LOCK\",\n    count(*) FILTER (WHERE work_event_type = 'NETWORK') AS \"NETWORK\",\n    count(*) FILTER (WHERE work_event_type = 'ADMISSION') AS \"ADMISSION\",\n    count(*) FILTER (WHERE work_event_type = 'OTHER') AS \"OTHER\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND workload_type = 'JOB'\nGROUP BY node_id\nORDER BY node_id",
+          "rawSql": "SELECT\n    'Node ' || node_id::TEXT AS node,\n    count(*) FILTER (WHERE work_event_type = 'CPU') AS \"CPU\",\n    count(*) FILTER (WHERE work_event_type = 'IO') AS \"IO\",\n    count(*) FILTER (WHERE work_event_type = 'LOCK') AS \"LOCK\",\n    count(*) FILTER (WHERE work_event_type = 'NETWORK') AS \"NETWORK\",\n    count(*) FILTER (WHERE work_event_type = 'ADMISSION') AS \"ADMISSION\",\n    count(*) FILTER (WHERE work_event_type = 'OTHER') AS \"OTHER\"\nFROM information_schema.crdb_cluster_active_session_history\nWHERE $__timeFilter(sample_time)\n  AND workload_type = 'JOB'\n  AND ('${node_filter}' = 'ALL' OR node_id::TEXT = '${node_filter}')\nGROUP BY node_id\nORDER BY node_id",
           "format": "table",
           "refId": "A"
         }
