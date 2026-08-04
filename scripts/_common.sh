@@ -307,6 +307,76 @@ stop_haproxy() {
     fi
 }
 
+check_haproxy_health() {
+    local retries="${1:-1}"
+    local interval="${2:-2}"
+    local attempt=0
+    while [[ $attempt -lt $retries ]]; do
+        if (echo > /dev/tcp/localhost/${HAPROXY_PORT}) 2>/dev/null; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        if [[ $attempt -lt $retries ]]; then
+            sleep "$interval"
+        fi
+    done
+    return 1
+}
+
+ensure_haproxy() {
+    if check_haproxy_health; then
+        return
+    fi
+    log_warn "HAProxy not responding on port $HAPROXY_PORT — attempting restart..."
+    if [[ "$DEPLOY_MODE" == "docker" ]]; then
+        $COMPOSE_CMD -f "${PROJECT_DIR}/compose.yml" restart crdb-haproxy
+    else
+        stop_haproxy
+        start_haproxy
+    fi
+    if check_haproxy_health 5 2; then
+        log_info "HAProxy recovered"
+    else
+        log_error "HAProxy failed to recover after restart"
+        exit 1
+    fi
+}
+
+generate_docker_haproxy_cfg() {
+    log_info "Generating haproxy.cfg for Docker cluster..."
+    local cfg="$HAPROXY_CFG"
+    cat > "$cfg" <<'DOCKERCFG'
+global
+    maxconn 4096
+    log stdout format raw local0
+
+defaults
+    mode tcp
+    timeout connect 10s
+    timeout client  30m
+    timeout server  30m
+    option clitcpka
+    option srvtcpka
+
+listen crdb-sql
+    bind *:26000
+    mode tcp
+    balance roundrobin
+    option httpchk GET /health?ready=1
+    server crdb-1 crdb-1:26257 check port 8080
+    server crdb-2 crdb-2:26257 check port 8080
+    server crdb-3 crdb-3:26257 check port 8080
+
+listen stats
+    bind *:8404
+    mode http
+    stats enable
+    stats uri /
+    stats refresh 5s
+DOCKERCFG
+    log_info "haproxy.cfg generated for Docker (3 backends)"
+}
+
 generate_haproxy_cfg() {
     log_info "Generating haproxy.cfg for roachprod cluster..."
     local cfg="$HAPROXY_CFG"
@@ -350,6 +420,21 @@ listen stats
 FOOTER
 
     log_info "haproxy.cfg generated with $((i - 1)) backends"
+}
+
+# ============================================================
+# Grafana Dashboard Helpers
+# ============================================================
+
+patch_dashboard_links() {
+    local db_console_url="$1"
+    local dashboard="${PROJECT_DIR}/grafana/dashboards/ash-overview.json"
+    if [[ ! -f "$dashboard" ]]; then
+        log_warn "Dashboard not found at $dashboard — skipping link patch"
+        return
+    fi
+    sed -i '' "s|http://[^\"]*:26258|${db_console_url}|g" "$dashboard"
+    log_info "Dashboard DB Console link set to $db_console_url"
 }
 
 # ============================================================

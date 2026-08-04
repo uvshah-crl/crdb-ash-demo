@@ -31,10 +31,12 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
     log_info "=== Setting up local CockroachDB cluster via Docker ==="
     log_info "Version: $CRDB_VERSION | Nodes: $NUM_NODES"
 
+    generate_docker_haproxy_cfg
     docker_compose_up
     wait_for_cluster_ready
     apply_cluster_settings
     verify_ash
+    patch_dashboard_links "http://localhost:26258"
 
     log_info "=== Cluster is ready ==="
     log_info "Admin UI: http://localhost:26258"
@@ -81,6 +83,7 @@ else
     log_info "=== Cluster is ready ==="
 
     EXTERNAL_IP=$(roachprod ip "${CLUSTER}:1" --external 2>/dev/null)
+    patch_dashboard_links "http://${EXTERNAL_IP}:26258"
     log_info "Admin UI: http://${EXTERNAL_IP}:26258"
     log_info "HAProxy stats: http://localhost:8404"
     log_info "SQL URL (via HAProxy): postgres://root@localhost:${HAPROXY_PORT}/defaultdb?sslmode=disable"

@@ -11,6 +11,7 @@ set -euo pipefail
 source "$(dirname "$0")/_common.sh"
 
 load_config
+init_deploy_mode
 
 GRAFANA_CONTAINER="crdb-grafana"
 GRAFANA_PORT=3001
@@ -32,6 +33,9 @@ start_grafana() {
     fi
 
     if [[ "$DEPLOY_MODE" == "roachprod" ]]; then
+        local ext_ip
+        ext_ip=$(roachprod ip "${CLUSTER}:1" --external 2>/dev/null)
+        patch_dashboard_links "http://${ext_ip}:26258"
         log_info "Generating roachprod-mode data source config..."
         # Move Docker-mode datasource out of the way to avoid duplicate default
         if [[ -f "$GRAFANA_DS_DOCKER" ]]; then
@@ -58,6 +62,8 @@ datasources:
       postgresVersion: 1400
       timescaledb: false
 EOF
+    else
+        patch_dashboard_links "http://localhost:26258"
     fi
 
     log_info "Starting Grafana container (port $GRAFANA_PORT)..."

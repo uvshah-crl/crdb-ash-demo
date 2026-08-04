@@ -21,7 +21,7 @@
     {
       "title": "DB Console",
       "type": "link",
-      "url": "http://3.16.50.54:26258",
+      "url": "http://3.139.81.240:26258",
       "icon": "external link",
       "tooltip": "CockroachDB Admin UI",
       "targetBlank": true

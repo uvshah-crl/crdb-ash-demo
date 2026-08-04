@@ -59,6 +59,7 @@ services:
   haproxy:
     image: haproxy:latest
     container_name: crdb-haproxy
+    restart: unless-stopped
     depends_on:
       - crdb-1
       - crdb-2

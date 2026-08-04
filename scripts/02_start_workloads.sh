@@ -14,6 +14,7 @@ source "$(dirname "$0")/_common.sh"
 load_config
 ensure_dbworkload
 init_deploy_mode
+ensure_haproxy
 
 LOGS_DIR="${PROJECT_DIR}/logs"
 mkdir -p "$LOGS_DIR"
